@@ -237,7 +237,12 @@ class cosmolSimTank(rectangularTank):
         plt.show()
     
     def posReading(self, currentPos):
-        return self.interpolateSim(currentPos[0], currentPos[1])[0]
+        # self.interpolateSim(currentPos[0], currentPos[1])[0]
+        return self.mapedTiles.get(currentPos) or self.mapedTiles[ 
+                min(self.mapedTiles.keys(), key = lambda key: self.euclideanDist(key, currentPos))]
+    
+    def euclideanDist(self, P1, P2):
+        return np.linalg.norm((P1[0]-P2[0], P1[1]-P2[1]))
     
     def sourceFound(self):
         for sourceLocation in self.sourceLocations:
@@ -558,8 +563,8 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
     visualize: Boolean
     """
     # Initialize the Tank
-    #waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
-    waterTank = diffusionModelTank(sourceLocations, tankWidth, tankHeight)
+    waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
+    #waterTank = diffusionModelTank(sourceLocations, tankWidth, tankHeight)
     boatType = gradientDecent
     # Initialize Evaluation Oarameters
     total_time_steps = 0.0

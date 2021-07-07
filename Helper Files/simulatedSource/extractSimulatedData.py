@@ -67,10 +67,11 @@ class dataProcessing:
             xlWorkbook = xl.Workbook()
             xlWorksheet = xlWorkbook.active
             # Write the Data from the CSV File to the Excel WorkBook
-            with open(inputFile, 'w+') as newFile:
-                reader = csv.reader(newFile, delimiter = excelDelimiter)
-                for row in reader:
-                    xlWorksheet.append(row)
+            with open(inputFile, "r") as inputData:
+                inReader = csv.reader(inputData, delimiter = excelDelimiter)
+                with open(excelFile, 'w+', newline=''):
+                    for row in inReader:
+                        xlWorksheet.append(row)
             # Save as New Excel File
             xlWorkbook.save(excelFile)
         # Else Load the GSR Data from the Excel File
@@ -85,7 +86,7 @@ class dataProcessing:
 
 class processData(dataProcessing):
     
-    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 5):
+    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 6):
         
         # -------------------------------------------------------------------#
         # ----------------------- Extract Run Info --------------------------#
@@ -102,7 +103,7 @@ class processData(dataProcessing):
         
         return x, z, concentrations
     
-    def getData(self, excelFile, testSheetNum = 0):
+    def getData(self, oldFile, testSheetNum = 0):
         """
         --------------------------------------------------------------------------
         Input Variable Definitions:
@@ -111,29 +112,30 @@ class processData(dataProcessing):
         --------------------------------------------------------------------------
         """
         # Check if File Exists
-        if not os.path.exists(excelFile):
-            print("The following Input File Does Not Exist:", excelFile)
+        if not os.path.exists(oldFile):
+            print("The following Input File Does Not Exist:", oldFile)
             sys.exit()
             
         # Convert TXT and CSV Files to XLSX
-        if excelFile.endswith(".txt") or excelFile.endswith(".csv") or excelFile.endswith(".numbers"):
+        if oldFile.endswith((".txt", ".csv", ".numbers")):
             # Extract Filename Information
-            oldFileExtension = os.path.basename(excelFile)
+            oldFileExtension = os.path.basename(oldFile)
             filename = os.path.splitext(oldFileExtension)[0]
-            newFilePath = os.path.dirname(excelFile) + "/Excel Files/"
+            newFilePath = os.path.dirname(oldFile) + "/Excel Files/"
             # Make Output Folder Directory if Not Already Created
             os.makedirs(newFilePath, exist_ok = True)
 
             # Convert CSV or TXT to XLSX
             excelFile = newFilePath + filename + ".xlsx"
-            xlWorkbook, xlWorksheet = self.convertToExcel(excelFile, excelFile, excelDelimiter = ",", overwriteXL = False, testSheetNum = testSheetNum)
+            xlWorkbook, xlWorksheet = self.convertToExcel(oldFile, excelFile, excelDelimiter = ",", overwriteXL = False, testSheetNum = testSheetNum)
         # If the File is Already an Excel File, Just Load the File
-        elif excelFile.endswith(".xlsx"):
+        elif oldFile.endswith(".xlsx"):
+            excelFile = oldFile
             # Load the GSR Data from the Excel File
             xlWorkbook = xl.load_workbook(excelFile, data_only=True, read_only=True)
             xlWorksheet = xlWorkbook.worksheets[testSheetNum]
         else:
-            print("The Following File is Neither CSV, TXT, Nor XLSX:", excelFile)
+            print("The Following File is Neither CSV, TXT, Nor XLSX:", oldFile)
             sys.exit()
         print("Extracting Data from the Excel File:", excelFile)
         
@@ -148,7 +150,7 @@ class processData(dataProcessing):
 
 if __name__ == "__main__":
     
-    cosmolFile = './Input Data/diffusion4.xlsx'
+    cosmolFile = './Input Data/diffusion4.numbers'
     x, y, z = processData().getData(cosmolFile)
     
     from scipy import interpolate

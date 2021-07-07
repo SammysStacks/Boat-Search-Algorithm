@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # Specify the Boat Parameters
     numBoats = 1   # The Number of Boats Checking for the Source.
     boatSpeed = 1  # Inches/Second. Can Move at an Arbitrary Angle
-    boatLocations = [(100,0)]
+    boatLocations = [(10,0)]
 
     # Specify the Tank's Parameters
     tankWidth = 20  # The width of the tank (Inches). Must be an Integer
