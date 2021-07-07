@@ -17,7 +17,9 @@ import pyexcel
 import openpyxl as xl
 # Plotting
 import matplotlib.pyplot as plt
-
+from mpl_toolkits import mplot3d
+# Interpolate
+from scipy import interpolate
 
 
 class dataProcessing:        
@@ -150,12 +152,8 @@ class processData(dataProcessing):
 
 if __name__ == "__main__":
     
-    cosmolFile = './Input Data/diffusion4.numbers'
+    cosmolFile = './Input Data/diffusion4.xlsx'
     x, y, z = processData().getData(cosmolFile)
-    
-    from scipy import interpolate
-    import numpy as np
-    from mpl_toolkits import mplot3d
     
     f = interpolate.interp2d(x, y, z, kind='quintic')
     xSamples = np.arange(-115,115,20)
@@ -164,12 +162,14 @@ if __name__ == "__main__":
     
     xx,yy=np.meshgrid(xSamples, ySamples)
     
+    # Plot Model
     fig = plt.figure()
-    ax = plt.axes(projection='3d');
-    #ax.scatter3D(xSamples, ySamples, zSamples.ravel(), c=zSamples.ravel(), cmap='Greens');
-    ax.scatter3D(xx.ravel(), yy.ravel(), zSamples.ravel(), c=zSamples.ravel(), cmap='Greens');
+    ax = fig.add_subplot(projection='3d')
+    ax.scatter(x, y, z, c=z)
+    plt.show()
     
-    plt.plot(x, z, 'ro-', xSamples, zSamples, 'b-')
+    fig = plt.figure()
+    plt.scatter(x, y, z, c=z)
     plt.show()
     
     

@@ -16,6 +16,7 @@ from scipy import interpolate
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 # Import Python Helper Files (And Their Location)
+sys.path.append('./Helper Files/simulatedSource/')  # Folder with All the Helper Files
 sys.path.append('./simulatedSource/')  # Folder with All the Helper Files
 import extractSimulatedData
 
