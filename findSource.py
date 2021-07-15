@@ -33,15 +33,15 @@ if __name__ == "__main__":
 
     # Specify the Boat Parameters
     numBoats = 1   # The Number of Boats Checking for the Source.
-    boatSpeed = 1  # Inches/Second. Can Move at an Arbitrary Angle
-    boatLocations = [(10,0)]
+    boatSpeed = 1  # numtiles/movement. Can Move at an Arbitrary Angle
+    boatLocations = [(10,1)]
 
     # Specify the Tank's Parameters
-    tankWidth = 20  # The width of the tank (Inches). Must be an Integer
-    tankHeight = 20 # The height of the tank (Inches). Must be an Integer
+    tankWidth = 30  # The width of the tank (Inches). Must be an Integer
+    tankHeight = 30 # The height of the tank (Inches). Must be an Integer
     
     # Specify the Source Locations
-    sourceLocations = [(13, 15)]
+    sourceLocations = [(13, 25)]
     # Specify the Simulation Data
     simFile = './Helper Files/simulatedSource/Input Data/diffusion4.xlsx'
     

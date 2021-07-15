@@ -14,7 +14,7 @@ import simulateBoat
 from scipy import interpolate
 # Plotting
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
+from mpl_toolkits.mplot3d import axes3d
 # Import Python Helper Files (And Their Location)
 sys.path.append('./Helper Files/simulatedSource/')  # Folder with All the Helper Files
 sys.path.append('./simulatedSource/')  # Folder with All the Helper Files
@@ -189,59 +189,49 @@ class cosmolSimTank(rectangularTank):
         super().__init__(tankWidth, tankHeight)  # Get Variables Inherited from the helper_Files Class
         
         self.mapedTiles = {}        
-        self.getSimData(simFile)
+        self.getSimData(simFile, tankWidth, tankHeight)
         
         # Initialize the Board
-        self.initializeBoard()
+        self.plotSimData()
     
     def dataRound(self, array):
-        return np.round(array, 5)
+        return np.round(array, 4)
         
-    def getSimData(self, simFile):
+    def getSimData(self, simFile, tankWidth, tankHeight):
         # Extract the Data from the Excel File
         self.simX, self.simY, self.simZ = extractSimulatedData.processData().getData(simFile)
         # Shift to Start at Zero,Zero
         self.simX -= min(self.simX)
         self.simY -= min(self.simY)
+        # Reduce X,Y to Gameboard Positions
+        self.simX = self.simX*tankWidth/max(self.simX)
+        self.simY = self.simY*tankHeight/max(self.simY)
         # Round X,Y so its Discrete and Comparable
         self.simX = self.dataRound(self.simX)
         self.simY = self.dataRound(self.simY)
-        # Respecify the Single Source
+        # Find the Single Source Input
         maxIndex = np.argmax(self.simZ)
-        self.sourceLocations = [(self.simX[maxIndex], self.simY[maxIndex])]
-        
-        # Reshape Board to Match Simulation
-        self.tankWidth = int(max(self.simX))
-        self.tankHeight = int(max(self.simY))
-        
-        # Save Interpolated Form
-        self.interpolateSim = interpolate.interp2d(self.simX, self.simY, self.simZ)
-        
+        self.sourceLocations = [(np.round(self.simX[maxIndex]), np.round(self.simY[maxIndex]))]
+                
         # Store Data in Mapped Tiles Data Structure
         positions = list(zip(self.simX, self.simY))
         self.mapedTiles = dict(zip(positions, self.simZ))
         
         # Reinitialize Tiles
-        self.tiles = dict(zip(positions, len(self.simZ)*[False]))
         self.initializeBoard()
-        self.plotSimData()
+        #self.tiles = dict(zip(positions, len(self.simZ)*[False]))
+        self.tiles[self.sourceLocations[0]] == True
     
-    def plotSimData(self):        
+    def plotSimData(self):  
         # Plot Model
         fig = plt.figure()
-        ax = fig.add_subplot(projection='3d')
+        ax = axes3d.Axes3D(fig)
         ax.scatter(self.simX, self.simY, self.simZ, c=self.simZ)
         plt.show()
-        
-        fig = plt.figure()
-        plt.scatter(self.simX, self.simY, c=self.simZ)
-        plt.show()
     
-    def posReading(self, currentPos):
-        # self.interpolateSim(currentPos[0], currentPos[1])[0]
-        return self.mapedTiles.get(currentPos) or self.mapedTiles[ 
-                min(self.mapedTiles.keys(), key = lambda key: self.euclideanDist(key, currentPos))]
-    
+    def posReading(self, currentPos, sensorType = ""):
+        return interpolate.griddata((self.simX, self.simY), self.simZ, currentPos, method='cubic')
+
     def euclideanDist(self, P1, P2):
         return np.linalg.norm((P1[0]-P2[0], P1[1]-P2[1]))
     
@@ -271,7 +261,7 @@ class diffusionModelTank(rectangularTank):
                 self.mapedTiles[(x, y)] = 0
     
     def diffuseModel(self, delX, delY):
-        return 10*math.exp(-(delY**2 + delX**2))
+        return math.exp(-(delY**2 + delX**2)/2)
     
     def diffuseSources(self):
         self.initializeMap()
@@ -293,10 +283,10 @@ class diffusionModelTank(rectangularTank):
         
         # Plot Model
         fig = plt.figure()
-        ax = fig.add_subplot(projection='3d')
+        ax = axes3d.Axes3D(fig)
         ax.scatter(x,y,z,c=z)
     
-    def posReading(self, currentPos):
+    def posReading(self, currentPos, sensorType = ""):
         # Loop Through Each Source to Find its Contribution
         sensorReading = 0
         for sourceLocation in self.sourceLocations:
@@ -315,7 +305,20 @@ class diffusionModelTank(rectangularTank):
             if self.tiles[sourceLocation] == True:
                 return True
         return False
-
+    
+class userInputModel(rectangularTank):
+    
+    def __init__(self, sourceLocations, tankWidth, tankHeight):
+        super().__init__(tankWidth, tankHeight)  # Get Variables Inherited from the helper_Files Class
+        
+        self.mapedTiles = {}
+        self.sourceLocations = sourceLocations
+    
+    def posReading(self, currentPos, sensorType = "Sensor"):
+        return float(input("Enter " + sensorType + " Reading: "))
+            
+    def sourceFound(self):
+        return bool(int(input("End the Simulation (Yes = 1; No = 0): ")))
 
 class Boat(object):
     """
@@ -414,6 +417,18 @@ class Boat(object):
         # Return the Three Sensor Positions
         return (sensorFrontX, sensorFrontY), (sensorLeftX, sensorLeftY), (sensorRightX, sensorRightY)
     
+    def getAngle(self, newDirection, referenceAngle = [1,0]):
+        # Find Angle Between Reference
+        unitVectorDirection = newDirection/np.linalg.norm(newDirection)
+        dot_product = np.dot(unitVectorDirection, referenceAngle)
+        newAngle = np.degrees(np.arccos(dot_product))
+        # Correction Factor to Angle as Cosine Repeats Values
+        needCorrection = newDirection[1] < 0
+        if needCorrection:
+            newAngle = 360 - newAngle
+        # Return the New Angle
+        return newAngle
+    
 
 
 # --------------------------------------------------------------------------- #
@@ -479,7 +494,7 @@ class gradientDecent(Boat):
     def __init__(self, tank, boatSpeed, boatLocations):
         super().__init__(tank, boatSpeed, boatLocations)
         
-    def updatePosition(self):
+    def updatePosition(self, findTangetPlane = False):
         """
         Simulate the passage of a single time-step.
 
@@ -491,9 +506,9 @@ class gradientDecent(Boat):
         # Find the Location of Each of the Three Sensors
         frontSensorPos, leftSensorPos, rightSensorPos = self.getSensorsPos(currentPos)
         # Find the Interpolated Values at the Sensor's Position
-        frontSensorVal = self.tank.posReading(frontSensorPos)
-        leftSensorPosVal = self.tank.posReading(leftSensorPos)
-        rightSensorPosVal = self.tank.posReading(rightSensorPos)
+        frontSensorVal = self.tank.posReading(frontSensorPos, sensorType = "Front Sensor")
+        leftSensorPosVal = self.tank.posReading(leftSensorPos, sensorType = "Left Sensor")
+        rightSensorPosVal = self.tank.posReading(rightSensorPos, sensorType = "Right Sensor")
         
         # Define Each Sensor in 3D Space
         frontPoint = np.array([frontSensorPos[0], frontSensorPos[1], frontSensorVal])
@@ -501,13 +516,15 @@ class gradientDecent(Boat):
         rightPoint = np.array([rightSensorPos[0], rightSensorPos[1], rightSensorPosVal])
                 
         # Find the Normal Vector to the 3-Point Plane
-        gradSensor = np.cross(frontPoint - leftPoint, rightPoint - leftPoint)
+        normVector = np.cross(frontPoint - leftPoint, rightPoint - leftPoint)
+        # Scale the Normal Vector to the Gradients Direction
+        gradSensor = normVector*(2*(normVector[2] < 0) - 1)
         if np.linalg.norm(gradSensor) != 0:
-            gradSensor = gradSensor*(2*(gradSensor[2] < 0) - 1)
             # Make Tangent Plane
-            #d = np.dot(gradSensor, frontPoint)
-            #gradSensor /= -d
-            #print('The equation is {0}x + {1}y + {2}z = {3}'.format(gradSensor[0], gradSensor[1], gradSensor[2], -1))
+            if findTangetPlane:
+                d = np.dot(gradSensor, frontPoint)
+                gradSensorPlane = -gradSensor/d
+                print('The equation is {0}x + {1}y + {2}z = {3}'.format(gradSensorPlane[0], gradSensorPlane[1], gradSensorPlane[2], -1))
             
             # Get the Direction of Max Increase
             newDirection = [gradSensor[0], gradSensor[1]]
@@ -516,14 +533,7 @@ class gradientDecent(Boat):
                 newDirection = max(allPoints, key=lambda x:x[-1])[0:2]
 
             # Get New Angle
-            referenceAngle = [1,0]
-            unitVectorDirection = newDirection/np.linalg.norm(newDirection)
-            dot_product = np.dot(unitVectorDirection, referenceAngle)
-            newAngle = np.degrees(np.arccos(dot_product))
-            # Correction Factor to Angle as Cosine Repeats Values
-            needCorrection = newDirection[1] < 0
-            if needCorrection:
-                newAngle = 360 - newAngle
+            newAngle = self.getAngle(newDirection)
         else:
             print("Gradient is Zero")
             newAngle = random.randrange(360)
@@ -540,14 +550,166 @@ class gradientDecent(Boat):
         self.setBoatDirection(newAngle)
         self.setBoatPosition(candidatePosition)
         self.tank.markAsVisited(self.position)
-                        
+
+class AStar(Boat):
+    """
+    Move to the Highest Gradient
+    """
+    
+    def __init__(self, tank, boatSpeed, boatLocations):
+        super().__init__(tank, boatSpeed, boatLocations)
+        
+        # Hold Past Three Values
+        self.recentVals = []
+        self.numHold = 3
+    
+    def updatePastVals(self, threeSensorPoints):
+        # Get Previous Past Values at the Position
+        self.recentVals.append(threeSensorPoints)
+        # Only Record the Last 'numHold' Positions
+        if len(self.recentVals) > self.numHold:
+            self.recentVals.pop(0)
+            
+    def getHeuristic(self, currentPos):
+        # Seperate X,Y,Z Data
+        prevX = []; prevY = []; prevZ = []
+        for prevReading in self.recentVals:
+            for prevPoint in prevReading:
+                prevX.append(prevPoint[0])
+                prevY.append(prevPoint[1])
+                prevZ.append(prevPoint[2])
+        # Interpolate the Space with the Recent Values
+        radius = min(self.sensorDistance*math.cos(math.radians(-self.sensorAngle)), self.sensorDistance*math.sin(math.radians(-self.sensorAngle)))
+        xi, yi = self.PointsInCircum(currentPos, radius)
+        zi = interpolate.griddata((prevX, prevY), prevZ, (xi, yi), method='cubic')
+        
+        # Find Max Point on the Circle
+        directionIndex = zi.argmax()
+        # Find the New Direction
+        newDirection = np.array([xi[directionIndex], yi[directionIndex]])
+        self.plotHeurisitic(xi, yi, zi, currentPos, newDirection)
+        return newDirection/np.linalg.norm(newDirection)
+    
+    def plotHeurisitic(self, x, y, z, currentPos, newDirection, figBuffer = 1):
+        fig = plt.figure()
+        ax = fig.add_subplot();
+        # Plot Data
+        ax.scatter(currentPos.getX(), currentPos.getY(), c = 'black')
+        cm = ax.scatter(x, y, c = z)
+        plt.arrow(currentPos.getX(), currentPos.getY(), newDirection[0] - currentPos.getX(), newDirection[1] - currentPos.getY(), width=0.02, color="black")
+        # Set Figure Limits
+        ax.set_xlim(min(x) - figBuffer, max(x) + figBuffer)
+        ax.set_ylim(min(y) - figBuffer, max(y) + figBuffer)
+        # Set Figure Information
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_title("Heuristic Map")
+        # Add Colormap
+        fig.colorbar(cm)
+        # Show Figure
+        plt.show()
+    
+    
+    def PointsInCircum(self, startPoint, r, n=1000):
+        # Find Largest Radius to Extrapolate
+        x = []; y = []
+        for i in range(0,n+1):
+            x.append(startPoint.getX() + math.cos(2*math.pi/n*i)*r)
+            y.append(startPoint.getY() + math.sin(2*math.pi/n*i)*r)
+        return x,y
+        
+    def updatePosition(self, findTangetPlane = False):
+        """
+        Simulate the passage of a single time-step.
+
+        Move the boat to a new position and mark the tile it is on as having
+        been Visited.
+        """
+        # Find Your Current Location
+        currentPos = self.position
+        # Find the Location of Each of the Three Sensors
+        frontSensorPos, leftSensorPos, rightSensorPos = self.getSensorsPos(currentPos)
+        # Find the Interpolated Values at the Sensor's Position
+        frontSensorVal = self.tank.posReading(frontSensorPos, sensorType = "Front Sensor")
+        leftSensorPosVal = self.tank.posReading(leftSensorPos, sensorType = "Left Sensor")
+        rightSensorPosVal = self.tank.posReading(rightSensorPos, sensorType = "Right Sensor")
+        
+        # Define Each Sensor in 3D Space
+        frontPoint = np.array([frontSensorPos[0], frontSensorPos[1], frontSensorVal])
+        leftPoint = np.array([leftSensorPos[0], leftSensorPos[1], leftSensorPosVal])
+        rightPoint = np.array([rightSensorPos[0], rightSensorPos[1], rightSensorPosVal])
+        # Update Information
+        self.updatePastVals((frontPoint, leftPoint, rightPoint))
+        # Find Heursitic Guess
+        guessDirection = self.getHeuristic(currentPos)
+                
+        # Find the Normal Vector to the 3-Point Plane
+        normVector = np.cross(frontPoint - leftPoint, rightPoint - leftPoint)
+        # Scale the Normal Vector to the Gradients Direction
+        gradSensor = normVector*(2*(normVector[2] < 0) - 1)
+        if np.linalg.norm(gradSensor) != 0:
+            # Make Tangent Plane
+            if findTangetPlane:
+                d = np.dot(gradSensor, frontPoint)
+                gradSensorPlane = -gradSensor/d
+                print('The equation is {0}x + {1}y + {2}z = {3}'.format(gradSensorPlane[0], gradSensorPlane[1], gradSensorPlane[2], -1))
+            
+            # Get the Direction of Max Increase
+            newDirection = [gradSensor[0], gradSensor[1]]
+            if np.linalg.norm(newDirection) == 0:
+                allPoints = [frontPoint, leftPoint, rightPoint]
+                newDirection = max(allPoints, key=lambda x:x[-1])[0:2]
+            newDirection = newDirection/np.linalg.norm(newDirection)
+            # Apply Heuristic
+            newDirection = newDirection + 0.2*guessDirection
+            newDirection = newDirection/np.linalg.norm(newDirection)
+
+            # Get New Angle
+            newAngle = self.getAngle(newDirection)
+        elif np.linalg.norm(guessDirection) != 0:
+            newDirection = guessDirection
+            newAngle = self.getAngle(newDirection)
+        else:
+            print("Gradient is Zero")
+            newDirection = [random.randrange(-100, 100), random.randrange(-100, 100)]
+            newDirection = newDirection/np.linalg.norm(newDirection)
+            newAngle = self.getAngle(newDirection)
+        
+        # Check to See if the Position is in the Tank
+        candidatePosition = currentPos.getNewPosition(newAngle, self.boatSpeed)
+        while not self.tank.isPositionIntank(candidatePosition):
+            candidatePosition = currentPos.getNewPosition(random.randrange(360), self.boatSpeed*2)
+        
+        # Print Results to the User
+        moveDistance = self.boatSpeed*np.linalg.norm(newDirection)
+        print("New Direction:", newDirection*self.boatSpeed)
+        print("Distance:", moveDistance)
+        print("Angle from (1,0):", newAngle)
+        # Find Turn Parameters
+        turnRadius = self.findRadius(moveDistance, currentPos.getX() - candidatePosition.getX())
+        turnAngle = self.findAngle(turnRadius, moveDistance)
+        print("Turn Radius:", turnRadius)
+        print("Angle Between Points in Circle:", turnAngle)
+        
+        # Move to the Position
+        self.setBoatDirection(newAngle)
+        self.setBoatPosition(candidatePosition)
+        self.tank.markAsVisited(self.position)
+    
+    def findRadius(self, distance, delX):
+        return distance*distance/(2*abs(delX))
+    
+    def findAngle(self, turnRadius, chordDist):
+        sinAngle = chordDist/(2*turnRadius)
+        return 2*np.degrees(np.arcsin(sinAngle))
+                 
 
 
 # --------------------------------------------------------------------------- #
 #                             Run Boat Simulation                             #
 # --------------------------------------------------------------------------- #
 
-def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats = 1, simFile = "./", visualize = True):
+def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats = 1, simFile = "./", visualize = False):
     """
     Runs NUM_TRIALS trials of the simulation and returns the mean number of
     time-steps needed to clean the fraction MIN_COVERAGE of the tank.
@@ -564,9 +726,11 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
     visualize: Boolean
     """
     # Initialize the Tank
-    waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
+    #waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
     #waterTank = diffusionModelTank(sourceLocations, tankWidth, tankHeight)
-    boatType = gradientDecent
+    waterTank = userInputModel(sourceLocations, tankWidth, tankHeight)
+    #boatType = gradientDecent
+    boatType = AStar
     # Initialize Evaluation Oarameters
     total_time_steps = 0.0
     # Initialize Animation for Searching
@@ -597,20 +761,19 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
 
 
 
-def showPlot1(title, x_label, y_label, sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats):
+def showPlot1(title, x_label, y_label, sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numActiveBoats):
     """
     Produces a plot comparing the two boat strategies in a 20x20 tank with 80%
     minimum coverage.
     """
-    num_boat_range = range(1, 11)
     times1 = []
     times2 = []
-    for numBoats in num_boat_range:
+    for numBoats in range(numActiveBoats):
         print("Plotting", numBoats, "boats...")        
         times1.append(runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats))
         times2.append(runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats))
-    pylab.plot(num_boat_range, times1) 
-    pylab.plot(num_boat_range, times2)
+    pylab.plot(range(numActiveBoats), times1) 
+    pylab.plot(range(numActiveBoats), times2)
     pylab.title(title)
     pylab.legend(('Standardboat', 'RandomWalkboat'))
     pylab.xlabel(x_label)

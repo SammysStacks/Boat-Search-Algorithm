@@ -17,7 +17,7 @@ import pyexcel
 import openpyxl as xl
 # Plotting
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
+from mpl_toolkits.mplot3d import axes3d
 # Interpolate
 from scipy import interpolate
 
@@ -88,7 +88,7 @@ class dataProcessing:
 
 class processData(dataProcessing):
     
-    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 6):
+    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 7):
         
         # -------------------------------------------------------------------#
         # ----------------------- Extract Run Info --------------------------#
@@ -154,22 +154,33 @@ if __name__ == "__main__":
     
     cosmolFile = './Input Data/diffusion4.xlsx'
     x, y, z = processData().getData(cosmolFile)
+    # Rescale Data
+    if True:
+        x -= min(x)
+        y -= min(y)
+        # Reduce X,Y to Gameboard Positions
+        x = x*20/max(x)
+        y = y*20/max(y)
     
-    f = interpolate.interp2d(x, y, z, kind='quintic')
-    xSamples = np.arange(-115,115,20)
-    ySamples = np.arange(-115,115,20)
-    zSamples = f(xSamples, ySamples)
-    
+    # Get Sampled Data
+    xSamples = np.arange(min(x), max(x), 0.2)
+    ySamples = np.arange(min(y), max(y), 0.2)
     xx,yy=np.meshgrid(xSamples, ySamples)
+    
+    # Interpolate Sampled Data
+    zSamples = interpolate.griddata((x, y), z, (xx,yy), method='cubic')
+    
+    # Plot Data
+    fig = plt.figure()
+    ax = axes3d.Axes3D(fig)
+    ax.scatter(xx.ravel(), yy.ravel(), zSamples.ravel(), c=zSamples.ravel())
+    plt.show()
     
     # Plot Model
     fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
+    ax = axes3d.Axes3D(fig)
     ax.scatter(x, y, z, c=z)
-    plt.show()
-    
-    fig = plt.figure()
-    plt.scatter(x, y, z, c=z)
+    ax.scatter(x[z<0],y[z<0],z[z<0], c = 'black')
     plt.show()
     
     
