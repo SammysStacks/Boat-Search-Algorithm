@@ -580,7 +580,7 @@ class AStar(Boat):
                 prevZ.append(prevPoint[2])
         # Interpolate the Space with the Recent Values
         radius = min(self.sensorDistance*math.cos(math.radians(-self.sensorAngle)), self.sensorDistance*math.sin(math.radians(-self.sensorAngle)))
-        xi, yi = self.PointsInCircum(currentPos, radius)
+        xi, yi = self.PointsInCircum(currentPos.getX(), currentPos.getY(), radius)
         zi = interpolate.griddata((prevX, prevY), prevZ, (xi, yi), method='cubic')
         
         # Find Max Point on the Circle
@@ -610,12 +610,12 @@ class AStar(Boat):
         plt.show()
     
     
-    def PointsInCircum(self, startPoint, r, n=1000):
+    def PointsInCircum(self, startX, startY, r, n=1000):
         # Find Largest Radius to Extrapolate
         x = []; y = []
         for i in range(0,n+1):
-            x.append(startPoint.getX() + math.cos(2*math.pi/n*i)*r)
-            y.append(startPoint.getY() + math.sin(2*math.pi/n*i)*r)
+            x.append(startX + math.cos(2*math.pi/n*i)*r)
+            y.append(startY + math.sin(2*math.pi/n*i)*r)
         return x,y
         
     def updatePosition(self, findTangetPlane = False):
@@ -691,6 +691,10 @@ class AStar(Boat):
         print("Turn Radius:", turnRadius)
         print("Angle Between Points in Circle:", turnAngle)
         
+        yCenter = currentPos.getY()
+        xCenter = currentPos.getX() + turnRadius*newDirection[0]/abs(newDirection[0])
+        self.plotResult(newDirection, currentPos, candidatePosition, xCenter, yCenter, turnRadius)
+        
         # Move to the Position
         self.setBoatDirection(newAngle)
         self.setBoatPosition(candidatePosition)
@@ -702,6 +706,24 @@ class AStar(Boat):
     def findAngle(self, turnRadius, chordDist):
         sinAngle = chordDist/(2*turnRadius)
         return 2*np.degrees(np.arcsin(sinAngle))
+    
+    def plotResult(self, newDirection, currentPos, finalPos, xCenter, yCenter, turnRadius):
+        fig = plt.figure()
+        ax = fig.add_subplot();
+        # Plot Future Movement
+        plt.arrow(currentPos.getX(), currentPos.getY(), finalPos.getX() - currentPos.getX(), finalPos.getY() - currentPos.getY(), width=0.001, color="black")
+        ax.scatter(currentPos.getX(), currentPos.getY(), c = 'green', s=15)
+        ax.scatter(finalPos.getX(), finalPos.getY(), c = 'red',  s=10)
+        # Plot Turning Information
+        ax.scatter(xCenter, yCenter, c = 'black')
+        circleX, circlY = self.PointsInCircum(xCenter, yCenter, turnRadius)
+        ax.scatter(circleX, circlY, s=1, marker=1)
+        # Set Figure Information
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_title("Heuristic Map")
+        # Show Figure
+        plt.show()
                  
 
 
