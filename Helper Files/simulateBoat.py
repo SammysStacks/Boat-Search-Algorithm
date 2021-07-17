@@ -91,7 +91,7 @@ class boatVisualization:
             #self.boats.append(self.w.create_image(x,y, image = self.boatImage))
             self.boats.append(self.w.create_oval(x1, y1, x2, y2, fill = "black"))
             self.boats.append(
-                self._draw_boat(boat.getBoatPosition(), boat.getBoatDirection()))
+                self._draw_boat(boat.getBoatPosition(), boat.getBoatAngle()))
         # Add Source
         for sourceLocation in tank.sourceLocations:
             x, y = sourceLocation[0] + 0.5, sourceLocation[1] + 0.5

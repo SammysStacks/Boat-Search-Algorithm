@@ -13,6 +13,8 @@
     Modules to Import Before Running the Program (Some May be Missing):
         %conda install matplotlib
         %conda install numpy
+        %pip install pyexcel
+        %pip install scipy
         
     --------------------------------------------------------------------------
 """
@@ -34,14 +36,14 @@ if __name__ == "__main__":
     # Specify the Boat Parameters
     numBoats = 1   # The Number of Boats Checking for the Source.
     boatSpeed = 1  # numtiles/movement. Can Move at an Arbitrary Angle
-    boatLocations = [(10,1)]
+    boatLocations = [(10,3)]
 
     # Specify the Tank's Parameters
     tankWidth = 30  # The width of the tank (Inches). Must be an Integer
     tankHeight = 30 # The height of the tank (Inches). Must be an Integer
     
     # Specify the Source Locations
-    sourceLocations = [(13, 25)]
+    sourceLocations = [(17, 29)]
     # Specify the Simulation Data
     simFile = './Helper Files/simulatedSource/Input Data/diffusion4.xlsx'
     
