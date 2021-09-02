@@ -963,10 +963,10 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
     visualize: Boolean
     """
     # Initialize the Tank
-    waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
+    #waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
     #waterTank = diffusionModelTank(sourceLocations, tankWidth, tankHeight)
+    waterTank = userInputModel(sourceLocations, tankWidth, tankHeight)
     
-    #waterTank = userInputModel(sourceLocations, tankWidth, tankHeight)
     # Initialize the Boat
     boatType = AStar
     # Initialize Evaluation Oarameters
@@ -1059,7 +1059,7 @@ def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, tankWidth, tank
     xData, yData, zData = waterTank.find2DSimMap(xVec, yVec)
     fullData = np.stack((xData, yData, zData))
     sc = plt.scatter(fullData[0], fullData[1], c=fullData[2], cmap='jet', norm=matplotlib.colors.LogNorm())
-    plt.clim(10E-20,10)  # identical to caxis([-4,4]) in MATLAB
+    #plt.clim(10E-20,10)  # identical to caxis([-4,4]) in MATLAB
     plt.colorbar(sc)
 
     for i in range(len(boatTypes)):
