@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
 # Interpolate
 from scipy import interpolate
+import pandas as pd
 
 
 class dataProcessing:        
@@ -65,17 +66,25 @@ class dataProcessing:
     def convertToExcel(self, inputFile, excelFile, excelDelimiter = ",", overwriteXL = False, testSheetNum = 0):
         # If the File is Not Already Converted: Convert the CSV to XLSX
         if not os.path.isfile(excelFile) or overwriteXL:
-            # Make Excel WorkBook
-            xlWorkbook = xl.Workbook()
-            xlWorksheet = xlWorkbook.active
-            # Write the Data from the CSV File to the Excel WorkBook
-            with open(inputFile, "r") as inputData:
-                inReader = csv.reader(inputData, delimiter = excelDelimiter)
-                with open(excelFile, 'w+', newline=''):
-                    for row in inReader:
-                        xlWorksheet.append(row)
-            # Save as New Excel File
-            xlWorkbook.save(excelFile)
+            if excelDelimiter == "fixedWidth":
+                df = pd.read_fwf(inputFile)
+                df.drop(index=0, inplace=True) # drop the underlines
+                df.to_excel(excelFile, index=False)
+                # Load the GSR Data from the Excel File
+                xlWorkbook = xl.load_workbook(excelFile, data_only=True, read_only=True)
+                xlWorksheet = xlWorkbook.worksheets[testSheetNum]
+            else:
+                # Make Excel WorkBook
+                xlWorkbook = xl.Workbook()
+                xlWorksheet = xlWorkbook.worksheets[0]
+                # Write the Data from the CSV File to the Excel WorkBook
+                with open(inputFile, "r") as inputData:
+                    inReader = csv.reader(inputData, delimiter = excelDelimiter)
+                    with open(excelFile, 'w+', newline=''):
+                        for row in inReader:
+                            xlWorksheet.append(row)    
+                # Save as New Excel File
+                xlWorkbook.save(excelFile)
         # Else Load the GSR Data from the Excel File
         else:
             # Load the GSR Data from the Excel File
@@ -84,11 +93,11 @@ class dataProcessing:
         
         # Return Excel Sheet
         return xlWorkbook, xlWorksheet
-    
+
 
 class processData(dataProcessing):
     
-    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 7):
+    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 3):
         
         # -------------------------------------------------------------------#
         # ----------------------- Extract Run Info --------------------------#
@@ -97,7 +106,7 @@ class processData(dataProcessing):
         # Loop Through the Info Section and Extract the Needed Run Info from Excel
         rowGenerator = xlWorksheet.rows
         for cell in rowGenerator:
-            
+
             if cell[1].value == yVal:
                 x.append(cell[0].value)
                 z.append(cell[2].value)
@@ -105,7 +114,7 @@ class processData(dataProcessing):
         
         return x, z, concentrations
     
-    def getData(self, oldFile, testSheetNum = 0):
+    def getData(self, oldFile, testSheetNum = 0, excelDelimiter = ",", yVal = 25):
         """
         --------------------------------------------------------------------------
         Input Variable Definitions:
@@ -129,7 +138,7 @@ class processData(dataProcessing):
 
             # Convert CSV or TXT to XLSX
             excelFile = newFilePath + filename + ".xlsx"
-            xlWorkbook, xlWorksheet = self.convertToExcel(oldFile, excelFile, excelDelimiter = ",", overwriteXL = False, testSheetNum = testSheetNum)
+            xlWorkbook, xlWorksheet = self.convertToExcel(oldFile, excelFile, excelDelimiter, overwriteXL = False, testSheetNum = testSheetNum)
         # If the File is Already an Excel File, Just Load the File
         elif oldFile.endswith(".xlsx"):
             excelFile = oldFile
@@ -142,7 +151,7 @@ class processData(dataProcessing):
         print("Extracting Data from the Excel File:", excelFile)
         
         # Extract Time and Current Data from the File
-        xPoints, zPoints, concentrations = self.extractCosmolData(xlWorksheet, yVal = 25)
+        xPoints, zPoints, concentrations = self.extractCosmolData(xlWorksheet, yVal)
         
         xlWorkbook.close()
         # Finished Data Collection: Close Workbook and Return Data to User
@@ -152,7 +161,7 @@ class processData(dataProcessing):
 
 if __name__ == "__main__":
     
-    cosmolFile = './Input Data/diffusion4.xlsx'
+    cosmolFile = './Input Data/diffusion4.txt'
     x, y, z = processData().getData(cosmolFile)
     # Rescale Data
     if True:

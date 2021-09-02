@@ -12,9 +12,12 @@ import numpy as np
 import simulateBoat
 # Interpolation
 from scipy import interpolate
+from scipy.interpolate import LinearNDInterpolator
 # Plotting
+import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
+import matplotlib.patheffects as pe
 # Import Python Helper Files (And Their Location)
 sys.path.append('./Helper Files/simulatedSource/')  # Folder with All the Helper Files
 sys.path.append('./simulatedSource/')  # Folder with All the Helper Files
@@ -213,6 +216,8 @@ class cosmolSimTank(rectangularTank):
         # Find the Single Source Input
         maxIndex = np.argmax(self.simZ)
         self.sourceLocations = [(np.round(self.simX[maxIndex]), np.round(self.simY[maxIndex]))]
+        # Interpolate the Space
+        self.interp = LinearNDInterpolator(list(zip(self.simX, self.simY)), self.simZ)
                 
         # Store Data in Mapped Tiles Data Structure
         positions = list(zip(self.simX, self.simY))
@@ -231,7 +236,8 @@ class cosmolSimTank(rectangularTank):
         plt.show()
     
     def posReading(self, currentPos, sensorType = ""):
-        return interpolate.griddata((self.simX, self.simY), self.simZ, currentPos, method='cubic')
+        return max(0, self.interp(currentPos))
+        #return max(0,interpolate.griddata((self.simX, self.simY), self.simZ, currentPos, method='linear'))
 
     def euclideanDist(self, P1, P2):
         return np.linalg.norm((P1[0]-P2[0], P1[1]-P2[1]))
@@ -241,7 +247,15 @@ class cosmolSimTank(rectangularTank):
             if self.tiles[sourceLocation] == True:
                 return True
         return False
-
+    
+    def find2DSimMap(self, xVec, yVec):
+        zData = []; xData = []; yData = []
+        for x in xVec:
+            for y in yVec:
+                zData.append(float(self.posReading((x,y))))
+                xData.append(x)
+                yData.append(y)
+        return xData, yData, zData
 
 class diffusionModelTank(rectangularTank):
     
@@ -352,7 +366,7 @@ class Boat(object):
         
         # Initialize Sensor Parameters
         self.sensorAngle = 30;
-        self.sensorDistance = 1.5;
+        self.sensorDistance = 1.25;
         
         # Keep Track of Past Movements
         self.pastValues = {}
@@ -445,9 +459,94 @@ class Boat(object):
     def getDirection(self, angle):
         newDirection = [math.cos(math.radians(angle)), math.sin(math.radians(angle))]
         return self.roundValues(newDirection)
-        
     
+    def getSensorPoints(self):
+        # Find the Location of Each of the Three Sensors
+        frontSensorPos, leftSensorPos, rightSensorPos = self.getSensorsPos(self.position)
+        # Find the Interpolated Values at the Sensor's Position
+        frontSensorVal = self.tank.posReading(frontSensorPos, sensorType = "Front Sensor")
+        leftSensorPosVal = self.tank.posReading(leftSensorPos, sensorType = "Left Sensor")
+        rightSensorPosVal = self.tank.posReading(rightSensorPos, sensorType = "Right Sensor")
+        # Define Each Sensor in 3D Space
+        frontPoint = np.array([frontSensorPos[0], frontSensorPos[1], frontSensorVal])
+        leftPoint = np.array([leftSensorPos[0], leftSensorPos[1], leftSensorPosVal])
+        rightPoint = np.array([rightSensorPos[0], rightSensorPos[1], rightSensorPosVal])
+        # Return Points
+        return frontPoint, leftPoint, rightPoint
 
+    def updateBoat(self, newDirection, printMovement = False):
+        # Find the Angle
+        newAngle = self.getAngle(newDirection)
+        
+        # Check to See if the Position is in the Tank
+        candidatePosition = self.position.getNewPosition(newAngle, self.boatSpeed)
+        while not self.tank.isPositionIntank(candidatePosition, self.sensorDistance):
+            # If The Position is Not in the Tank, Bound the Position by the Tank
+            boundaryVals = [self.tank.tankWidth, self.tank.tankHeight]
+            potentialVals = [candidatePosition.getX(), candidatePosition.getY()]
+            potentialPos = []
+            for axisPos in range(len(newDirection)):
+                potentialPos.append(max(self.sensorDistance, min(potentialVals[axisPos], boundaryVals[axisPos]-self.sensorDistance)))
+            # If Going Outside of Tank, Turn Around
+            if potentialPos[0] == potentialPos[1] == 0 or (candidatePosition.getX() == potentialPos[0] and candidatePosition.getY() == potentialPos[1]):
+                newAngle = random.randrange(360)
+                candidatePosition = self.position.getNewPosition(newAngle, self.boatSpeed)
+            else:
+                # Retrieve the New Position Object
+                candidatePosition = Position(potentialPos[0], potentialPos[1])
+                # Retrive New Direction and Angle
+                newDirection = [candidatePosition.getX() - self.position.getX(), candidatePosition.getY() - self.position.getY()]
+                newAngle = self.getAngle(newDirection)
+        
+        # Print Movement Results to the User
+        if printMovement:
+            moveDistance = self.boatSpeed*np.linalg.norm(newDirection)
+            print("New Direction:", newDirection*self.boatSpeed)
+            print("Distance:", moveDistance)
+            print("Angle from (1,0):", newAngle)
+            # Find Turn Parameters
+            if np.round(newDirection[0], 10) == np.round(self.boatDirection[0], 10) and np.round(newDirection[1], 10) == np.round(self.boatDirection[1], 10):
+                print("Go Straight")
+            else:
+                if self.boatDirection[0] != 0:
+                    xCenter, yCenter, turnRadius = self.findMovementCircle(self.position.getX(), self.position.getY(), candidatePosition.getX(), candidatePosition.getY(), self.boatDirection[1]/self.boatDirection[0])
+                    turnAngle = self.findAngle(turnRadius, moveDistance)
+                else:
+                    turnRadius = self.findRadius(moveDistance, self.position.getX() - candidatePosition.getX())
+                    turnAngle = self.findAngle(turnRadius, moveDistance)
+                    yCenter = self.position.getY()
+                    xCenter = self.position.getX() + turnRadius*newDirection[0]/abs(newDirection[0])
+                print("Turn Radius:", turnRadius)
+                print("Angle Between Points in Circle:", turnAngle)
+                self.plotResult(newDirection, self.position, candidatePosition, xCenter, yCenter, turnRadius)
+                print("")
+        
+        # Move to the Position
+        self.setBoatAngle(newAngle)
+        self.setBoatPosition(candidatePosition)
+        self.tank.markAsVisited(self.position)
+        self.setBoatDirectionVector(newDirection)
+    
+    def findRadius(self, distance, delX):
+        return distance*distance/(2*abs(delX))
+    
+    def findAngle(self, turnRadius, chordDist):
+        sinAngle = chordDist/(2*turnRadius)
+        return 2*np.degrees(np.arcsin(sinAngle))
+    
+    def findMovementCircle(self, x1, y1, x2, y2, dRatio):
+        # Find Circle Center
+        if y1 == y2:
+            centerX = (x2+x1)/2
+            centerY = (y1-y2)**2
+        else:
+            centerY = (2*dRatio*y1*(x2-x1) - (x1-x2)**2 - y2**2 + y1**2) / (2*(y1-y2 + dRatio*(x2-x1)))
+            centerX = dRatio*(y1-centerY) + x1
+        # Find Circle Radius
+        radius = math.sqrt((x1-centerX)**2 + (y1-centerY)**2)
+        # Return Circle Parameters
+        return centerX, centerY, radius
+    
 
 # --------------------------------------------------------------------------- #
 #                  Movement Strategies: Search Algorythms                     #
@@ -497,16 +596,23 @@ class randomBoat(Boat):
         Move the boat to a new position and mark the tile it is on as having
         been Visited.
         """
+        # Get the Current Position
         currentPosition = self.getBoatPosition()
-        currentAngle = self.getBoatAngle()
-        self.setBoatAngle(random.randrange(360))
+        # Randomly Select a New Angle/Direction
+        newAngle = random.randrange(360)
+        # Get New Position that is Inside the Tank
+        new_pos = currentPosition.getNewPosition(newAngle, self.boatSpeed)
+        while not self.tank.isPositionIntank(new_pos, self.sensorDistance):
+            # If Not in Tank, Randonly Select New Angle Again
+            newAngle = random.randrange(360)
+            new_pos = currentPosition.getNewPosition(newAngle, self.boatSpeed)
+        # Update the Boat Parameters
+        self.setBoatPosition(new_pos)
+        self.tank.markAsVisited(new_pos)
+        self.setBoatAngle(newAngle)
         self.boatDirection = self.getDirection(self.boatAngle)
-        new_pos = currentPosition.getNewPosition(currentAngle, self.boatSpeed)
-        if self.tank.isPositionIntank(new_pos, self.sensorDistance):
-            self.setBoatPosition(new_pos)
-            self.tank.markAsVisited(new_pos)
 
-class gradientDescent(Boat):
+class AStar(Boat):
     """
     Move to the Highest Gradient
     """
@@ -516,18 +622,30 @@ class gradientDescent(Boat):
         
         # Hold Past Three Values
         self.recentVals = []    # List of Tuple of Recent Values
-        self.numHold = 3        # Number of Past Values to Hold
+        self.numHold = 5        # Number of Past Values to Hold
         # Heursitci Information
         self.heuristicRadius = min(abs(self.sensorDistance*math.cos(math.radians(-self.sensorAngle))), abs(self.sensorDistance*math.sin(math.radians(-self.sensorAngle))))
-    
-    def boatStuck(self):
+        # Plotting Parameters
+        self.ax = None
+        
+        
+    def boatStuck(self, numConsider = 5, numSensors = 3):
+        """
+        If the boat keeps going back and forwards to same spot, return True
+        """
         # Seperate X,Y,Z Sensor Data from the Recent Readings
         prevX, prevY, prevZ = self.getPastVals()
-        if len(prevX) > 3:
-            # Take Last Two Samples
-            prevX = prevX[-6:len(prevX)]; prevY = prevY[-6:len(prevY)];
-            # Check to See if They are the Same
-            return prevX[0] == prevX[3] and prevY[0] == prevY[3]
+        if len(prevX) >= numSensors*numConsider:
+            # Take Last numConsider Samples of First Sensor
+            prevX = prevX[-numSensors*numConsider:len(prevX)][0::numSensors];
+            prevY = prevY[-numSensors*numConsider:len(prevY)][0::numSensors];
+            # Round Data
+            prevX = np.round(prevX, 2); prevY = np.round(prevY, 2);
+            # Check to See if the boat keeps returning to its old position
+            for pointNum in range(2,len(prevX),2):
+                if prevX[0] != prevX[pointNum] and prevY[0] != prevY[pointNum]:
+                    return False
+            return True
         else:
             return False
         
@@ -548,90 +666,50 @@ class gradientDescent(Boat):
                 prevZ.append(prevPoint[2])
         return prevX, prevY, prevZ
             
-    def getHeuristic(self, currentPos):
+    def getHeuristic(self, currentPos, plotDecisions = False):
         # Seperate X,Y,Z Sensor Data from the Recent Readings
         prevX, prevY, prevZ = self.getPastVals()
         # Interpolate the Space with the Recent Readings
         xSamples, ySamples = self.PointsInCircum(currentPos.getX(), currentPos.getY(), self.heuristicRadius)
-        zSamples = self.roundValues(interpolate.griddata((prevX, prevY), prevZ, (xSamples, ySamples), method='cubic'))
+        zSamples = self.roundValues(interpolate.griddata((prevX, prevY), prevZ, (xSamples, ySamples), method='linear'))
         
         # If No Heuristic Gradient, Keep Going Straight
-        allSame = all(zVal == zSamples[0] for zVal in zSamples)
+        allSame = all(round(zVal,5) == round(zSamples[0],5) for zVal in zSamples)
         if allSame:
-            newDirection = self.boatDirection*self.heuristicRadius
+            newDirection = self.boatDirection#*self.heuristicRadius
         # Else, Find the Heuristic Direction
         else:
             # Find Max Point on the Circle
             directionIndex = np.argmax(zSamples)
             # Find the New Direction
             newDirection = np.array([xSamples[directionIndex] - currentPos.getX(), ySamples[directionIndex] - currentPos.getY()])
-            print("heur", newDirection)
         # Plot the Results
-        # self.plotHeurisitic(xSamples, ySamples, zSamples, currentPos, newDirection)
+        if plotDecisions:
+            self.ax = self.plotHeurisitic(xSamples, ySamples, zSamples, currentPos, newDirection)
         return newDirection/np.linalg.norm(newDirection)
-    
-    def plotHeurisitic(self, x, y, z, currentPos, newDirection, figBuffer = 0.5):
-        fig = plt.figure()
-        ax = fig.add_subplot();
-        # Plot Data
-        ax.scatter(currentPos.getX(), currentPos.getY(), c = 'black')
-        cm = ax.scatter(x, y, c = z)
-        plt.arrow(currentPos.getX(), currentPos.getY(), newDirection[0], newDirection[1] , width=0.02, color="black")
-        # Set Figure Limits
-        ax.set_xlim(min(x) - figBuffer, max(x) + figBuffer)
-        ax.set_ylim(min(y) - figBuffer, max(y) + figBuffer)
-        # Set Figure Information
-        ax.set_xlabel("X-Axis")
-        ax.set_ylabel("Y-Axis")
-        ax.set_title("Heuristic Map")
-        # Add Colormap
-        fig.colorbar(cm)
-        # Show Figure
-        plt.show()
-    
-    
-    def PointsInCircum(self, startX, startY, circleRadius, n = 1000):
-        # Find Largest Radius to Extrapolate
-        x = []; y = []
-        for i in range(0,n+1):
-            x.append(startX + math.cos(2*math.pi/n*i)*circleRadius)
-            y.append(startY + math.sin(2*math.pi/n*i)*circleRadius)
-        return x,y
         
-    def updatePosition(self, applyHeuristic = True, printMovement = True, findTangetPlane = False):
+    
+    def updatePosition(self, applyHeuristic = True, plotDecisions = False, printMovement = False, findTangetPlane = False):
         """
         Simulate the passage of a single time-step.
 
         Move the boat to a new position and mark the tile it is on as having
         been Visited.
         """
-        # Find Your Current Location Information
-        currentPos = self.position
-        currentDirection = self.boatDirection
+        # Find the Current Sensor Locations/Values
+        frontPoint, leftPoint, rightPoint = self.getSensorPoints()
         
-        # Find the Location of Each of the Three Sensors
-        frontSensorPos, leftSensorPos, rightSensorPos = self.getSensorsPos(currentPos)
-        # Find the Interpolated Values at the Sensor's Position
-        frontSensorVal = self.tank.posReading(frontSensorPos, sensorType = "Front Sensor")
-        leftSensorPosVal = self.tank.posReading(leftSensorPos, sensorType = "Left Sensor")
-        rightSensorPosVal = self.tank.posReading(rightSensorPos, sensorType = "Right Sensor")
-        # Define Each Sensor in 3D Space
-        frontPoint = np.array([frontSensorPos[0], frontSensorPos[1], frontSensorVal])
-        leftPoint = np.array([leftSensorPos[0], leftSensorPos[1], leftSensorPosVal])
-        rightPoint = np.array([rightSensorPos[0], rightSensorPos[1], rightSensorPosVal])
-        
-        # Update Information
-        self.updatePastVals((frontPoint, leftPoint, rightPoint))
-        # Apply A Star Heuristic
+        # If Apply A Star Heuristic
         if applyHeuristic:
+            # Keep Track of Previous Results
+            self.updatePastVals((frontPoint, leftPoint, rightPoint))
             # Find Heursitic Guess Direction
-            guessDirection = self.getHeuristic(currentPos)
+            guessDirection = self.getHeuristic(self.position, plotDecisions)
                 
         # Find the Normal Vector to the 3-Point Plane
         normVector = np.cross(frontPoint - leftPoint, rightPoint - leftPoint)
         # Scale the Normal Vector to the Gradients Direction
         gradientVector = self.roundValues(normVector*(2*(normVector[2] < 0) - 1))
-        print("Grad vec: ", gradientVector, normVector)
         
         if np.linalg.norm(gradientVector[0:2]) != 0:
             # Make Tangent Plane
@@ -641,92 +719,82 @@ class gradientDescent(Boat):
                 print('The equation is {0}x + {1}y + {2}z = {3}'.format(gradSensorPlane[0], gradSensorPlane[1], gradSensorPlane[2], -1))
             
             # Get the Direction of Max Increase
-            newDirection = [gradientVector[0], gradientVector[1]]
+            newDirection = gradientVector[0:2]
             newDirection = newDirection/np.linalg.norm(newDirection)
             # Apply Heuristic
             if applyHeuristic:
-                newDirection = newDirection + 0.5*guessDirection
+                newDirection = newDirection + guessDirection
                 newDirection = newDirection/np.linalg.norm(newDirection)
 
         elif applyHeuristic and np.linalg.norm(guessDirection) != 0:
             print("The Gradient is Zero; Using the Heuristic")
             newDirection = guessDirection
+        elif applyHeuristic:
+            print("The Reading is Not Significant; Going in Max Weighted Direction")
+            newDirection = [0,0]; currentPos = [self.position.getX(), self.position.getY()]
+            for point in [frontPoint, leftPoint, rightPoint]:
+                newDirection += (point[0:2] - currentPos)*point[-1]
+            if np.linalg.norm(newDirection) != 0:
+                newDirection = newDirection/np.linalg.norm(newDirection)
+            else:
+                newDirection = self.boatDirection
         else:
-            print("The Reading is Not Significant; Going in Max Direction")
-            allPoints = [frontPoint, leftPoint, rightPoint]
-            newDirection = max(allPoints, key=lambda x:x[-1])[0:2]
-            newDirection = newDirection/np.linalg.norm(newDirection)
-        # Check to See if You Are Stuck
+            newDirection = self.boatDirection
+            
+        # Check to See if You Are Stuck: Switching Back and Forwards
         if self.boatStuck():
             newDirection = self.getDirection(random.randrange(360))
         
-        # Round the Direction and Find the Angle
-        newDirection = self.roundValues(newDirection)
-        newAngle = self.getAngle(newDirection)
+        if plotDecisions:
+            try:
+                self.plotDecision(self.position, self.heuristicRadius*gradientVector[0:2]/np.linalg.norm(gradientVector[0:2]),  newDirection*self.heuristicRadius, self.ax)
+            except:
+                print("Cant Plot Decision")
         
-        # Check to See if the Position is in the Tank
-        candidatePosition = currentPos.getNewPosition(newAngle, self.boatSpeed)
-        if not self.tank.isPositionIntank(candidatePosition, self.sensorDistance):
-            # If The Position is Not in the Tank, Bound the Position by the Tank
-            boundaryVals = [self.tank.tankWidth, self.tank.tankHeight]
-            potentialVals = [candidatePosition.getX(), candidatePosition.getY()]
-            candidatePosition = []
-            for axisPos in range(len(newDirection)):
-                candidatePosition.append(max(self.sensorDistance, min(potentialVals[axisPos], boundaryVals[axisPos]-self.sensorDistance)))
-            # Retrieve the New Position Object
-            candidatePosition = Position(candidatePosition[0], candidatePosition[1])
-            # Retrive New Direction and Angle
-            newDirection = [candidatePosition.getX() - currentPos.getX(), candidatePosition.getY() - currentPos.getY()]
-            newAngle = self.getAngle(newDirection)
-        
-        # Print Movement Results to the User
-        if printMovement:
-            moveDistance = self.boatSpeed*np.linalg.norm(newDirection)
-            print("New Direction:", newDirection*self.boatSpeed)
-            print("Distance:", moveDistance)
-            print("Angle from (1,0):", newAngle)
-            # Find Turn Parameters
-            if np.round(newDirection[0], 10) == np.round(currentDirection[0], 10) and np.round(newDirection[1], 10) == np.round(currentDirection[1], 10):
-                print("Go Straight")
-            else:
-                if currentDirection[0] != 0:
-                    xCenter, yCenter, turnRadius = self.findMovementCircle(currentPos.getX(), currentPos.getY(), candidatePosition.getX(), candidatePosition.getY(), currentDirection[1]/currentDirection[0])
-                    turnAngle = self.findAngle(turnRadius, moveDistance)
-                else:
-                    turnRadius = self.findRadius(moveDistance, currentPos.getX() - candidatePosition.getX())
-                    turnAngle = self.findAngle(turnRadius, moveDistance)
-                    yCenter = currentPos.getY()
-                    xCenter = currentPos.getX() + turnRadius*newDirection[0]/abs(newDirection[0])
-                print("Turn Radius:", turnRadius)
-                print("Angle Between Points in Circle:", turnAngle)
-                self.plotResult(newDirection, currentPos, candidatePosition, xCenter, yCenter, turnRadius)
-                print("")
-        
-        # Move to the Position
-        self.setBoatAngle(newAngle)
-        self.setBoatPosition(candidatePosition)
-        self.tank.markAsVisited(self.position)
-        self.setBoatDirectionVector(newDirection)
+        # Update Boat
+        self.updateBoat(newDirection, printMovement)
     
-    def findMovementCircle(self, x1, y1, x2, y2, dRatio):
-        # Find Circle Center
-        if y1 == y2:
-            centerX = (x2+x1)/2
-            centerY = (y1-y2)**2
-        else:
-            centerY = (2*dRatio*y1*(x2-x1) - (x1-x2)**2 - y2**2 + y1**2) / (2*(y1-y2 + dRatio*(x2-x1)))
-            centerX = dRatio*(y1-centerY) + x1
-        # Find Circle Radius
-        radius = math.sqrt((x1-centerX)**2 + (y1-centerY)**2)
-        # Return Circle Parameters
-        return centerX, centerY, radius
+    def PointsInCircum(self, startX, startY, circleRadius, n = 1000):
+        # Find Largest Radius to Extrapolate
+        x = []; y = []
+        for i in range(0,n+1):
+            x.append(startX + math.cos(2*math.pi/n*i)*circleRadius)
+            y.append(startY + math.sin(2*math.pi/n*i)*circleRadius)
+        return x,y
     
-    def findRadius(self, distance, delX):
-        return distance*distance/(2*abs(delX))
-    
-    def findAngle(self, turnRadius, chordDist):
-        sinAngle = chordDist/(2*turnRadius)
-        return 2*np.degrees(np.arcsin(sinAngle))
+    def plotHeurisitic(self, x, y, z, currentPos, newDirection, figBuffer = 0.5):
+        fig = plt.figure()
+        ax = fig.add_subplot();
+        # Plot Data
+        ax.scatter(currentPos.getX(), currentPos.getY(), c = 'black')
+        cm = ax.scatter(x, y, c = z)
+        plt.arrow(currentPos.getX(), currentPos.getY(), newDirection[0], newDirection[1] , width=0.02, color="red")
+        # Set Figure Limits
+        ax.set_xlim(min(x) - figBuffer, max(x) + figBuffer)
+        ax.set_ylim(min(y) - figBuffer, max(y) + figBuffer)
+        # Set Figure Information
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_title("Heuristic Map")
+        # Add Colormap
+        fig.colorbar(cm)
+        return ax
+
+    def plotDecision(self, currentPos, gradVec,  newDirection, ax = None):
+        if ax == None:
+            fig = plt.figure()
+            ax = fig.add_subplot();
+        # Plot Data
+        plt.arrow(currentPos.getX(), currentPos.getY(), gradVec[0], gradVec[1] , width=0.02, color="black")
+        plt.arrow(currentPos.getX(), currentPos.getY(), newDirection[0], newDirection[1] , width=0.02, color="green")
+        # Set Figure Information
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_title("Movement Decision Map")
+        # Show Figure
+        plt.show()
+        # Clean Up
+        self.ax = None
     
     def plotResult(self, newDirection, currentPos, finalPos, xCenter, yCenter, turnRadius, figBuffer = 1):
         fig = plt.figure()
@@ -748,14 +816,137 @@ class gradientDescent(Boat):
         ax.set_ylim(min(circleY) - figBuffer, max(circleY) + figBuffer)
         # Show Figure
         plt.show()
-                 
+    
+
+class gradientDescent(Boat):
+    """
+    Move to the Highest Gradient
+    """
+    
+    def __init__(self, tank, boatSpeed, boatLocations):
+        super().__init__(tank, boatSpeed, boatLocations)
+        
+        self.ParentClass = AStar(tank, boatSpeed, boatLocations)
+        
+    def updatePosition(self, applyHeuristic = False, plotDecisions = True, printMovement = False, findTangetPlane = False):
+        """
+        Simulate the passage of a single time-step.
+
+        Move the boat to a new position and mark the tile it is on as having
+        been Visited.
+        """
+        self.ParentClass.updatePosition(applyHeuristic = False, plotDecisions = False, printMovement = False, findTangetPlane = False)
+        
+        # Move to the Position
+        self.setBoatAngle(self.ParentClass.boatAngle)
+        self.setBoatPosition(self.ParentClass.position)
+        self.tank.markAsVisited(self.position)
+        self.setBoatDirectionVector(self.ParentClass.boatDirection)
+        
+class maxDirection(Boat):
+    """
+    Move to the Highest Gradient
+    """
+    
+    def __init__(self, tank, boatSpeed, boatLocations):
+        super().__init__(tank, boatSpeed, boatLocations)
+        
+        
+    def updatePosition(self, applyHeuristic = False, plotDecisions = True, printMovement = False, findTangetPlane = False):
+        """
+        Simulate the passage of a single time-step.
+
+        Move the boat to a new position and mark the tile it is on as having
+        been Visited.
+        """
+        # Find Your Current Location Information
+        frontPoint, leftPoint, rightPoint = self.getSensorPoints()
+
+        # Find Max Direction
+        allPoints = np.round([frontPoint, leftPoint, rightPoint], 10)
+        newPosition = max(allPoints, key=lambda x:x[-1])[0:2]
+        newDirection = newPosition - [self.position.getX(), self.position.getY()]
+        if np.linalg.norm(newDirection) != 0:
+            newDirection = newDirection/np.linalg.norm(newDirection)
+        else:
+            newDirection = self.boatDirection
+        
+        # Update Boat
+        self.updateBoat(newDirection)
+
+class weightedMaxDirection(Boat):
+        
+    def __init__(self, tank, boatSpeed, boatLocations):
+        super().__init__(tank, boatSpeed, boatLocations)
+        
+        
+    def updatePosition(self, applyHeuristic = False, plotDecisions = True, printMovement = False, findTangetPlane = False):
+        """
+        Simulate the passage of a single time-step.
+
+        Move the boat to a new position and mark the tile it is on as having
+        been Visited.
+        """
+        # Find Your Current Location Information
+        frontPoint, leftPoint, rightPoint = self.getSensorPoints()
+        
+        # ----------- Algorythm -------- #
+        # Find Weighted Max Direction
+        newDirection = [0,0]; currentPos = [self.position.getX(), self.position.getY()]
+        for point in [frontPoint, leftPoint, rightPoint]:
+            newDirection += (point[0:2] - currentPos)*point[-1]
+        if np.linalg.norm(newDirection) != 0:
+            newDirection = newDirection/np.linalg.norm(newDirection)
+        else:
+            newDirection = self.boatDirection
+        # ------------------------------ #
+        
+        # Update Boat
+        self.updateBoat(newDirection)
+        
+        
+class pureHeuristic(AStar):
+    """
+    Move to the Highest Gradient
+    """
+    
+    def __init__(self, tank, boatSpeed, boatLocations):
+        super().__init__(tank, boatSpeed, boatLocations)
+        
+        # Hold Past Three Values
+        self.recentVals = []    # List of Tuple of Recent Values
+        self.numHold = 3        # Number of Past Values to Hold
+        # Heursitci Information
+        self.heuristicRadius = min(abs(self.sensorDistance*math.cos(math.radians(-self.sensorAngle))), abs(self.sensorDistance*math.sin(math.radians(-self.sensorAngle))))
+        
+    def updatePosition(self, applyHeuristic = True, plotDecisions = False, printMovement = False, findTangetPlane = False):
+        """
+        Simulate the passage of a single time-step.
+
+        Move the boat to a new position and mark the tile it is on as having
+        been Visited.
+        """
+        # Find Your Current Location Information
+        frontPoint, leftPoint, rightPoint = self.getSensorPoints()
+        
+        # Update Information
+        self.updatePastVals((frontPoint, leftPoint, rightPoint))
+        # Apply A Star Heuristic
+        newDirection = self.getHeuristic(self.position)
+                
+        # Check to See if You Are Stuck
+        if self.boatStuck():
+            newDirection = self.getDirection(random.randrange(360))
+        
+        # Update Boat
+        self.updateBoat(newDirection)
 
 
 # --------------------------------------------------------------------------- #
 #                             Run Boat Simulation                             #
 # --------------------------------------------------------------------------- #
 
-def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats = 1, simFile = "./", visualize = False):
+def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats = 1, simFile = "./", visualize = True):
     """
     Runs NUM_TRIALS trials of the simulation and returns the mean number of
     time-steps needed to clean the fraction MIN_COVERAGE of the tank.
@@ -772,11 +963,12 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
     visualize: Boolean
     """
     # Initialize the Tank
-    #waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
+    waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
     #waterTank = diffusionModelTank(sourceLocations, tankWidth, tankHeight)
-    waterTank = userInputModel(sourceLocations, tankWidth, tankHeight)
+    
+    #waterTank = userInputModel(sourceLocations, tankWidth, tankHeight)
     # Initialize the Boat
-    boatType = gradientDescent
+    boatType = AStar
     # Initialize Evaluation Oarameters
     total_time_steps = 0.0
     # Initialize Animation for Searching
@@ -804,6 +996,83 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeig
     
     #Return the Total Time Steps it Took
     return total_time_steps
+
+def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats = 1, simFile = "./"):
+    """
+    Runs NUM_TRIALS trials of the simulation and returns the mean number of
+    time-steps needed to clean the fraction MIN_COVERAGE of the tank.
+
+    The simulation is run with numBoats boats of type boat_TYPE, each with
+    speed SPEED, in a tank of dimensions tankWidth x tankHeight.
+
+    sourceLocations: A list of tuples representing the x,y locations of the sources [(1,2),(3,4)]
+    boatLocations: A list of tuples representing the x,y locations of the boats [(1,2),(3,4)]
+    boatSpeed: a float (boatSpeed > 0)
+    tankWidth: an int (tankWidth > 0)
+    tankHeight: an int (tankHeight > 0)
+    numBoats: an int (numBoats > 0)
+    visualize: Boolean
+    """
+    # Initialize the Boat
+    boatTypes = [AStar, gradientDescent, pureHeuristic, weightedMaxDirection, maxDirection, randomBoat]
+    labels = ['AStar', 'gradientDescent', 'pureHeuristic', 'weightedMaxDirection', 'maxDirection', 'randomDirection ']
+    timeSteps = []
+    #boatTypes = [AStar, gradientDescent, pureHeuristic]
+
+
+    algPositions = {}
+    for i, boatType in enumerate(boatTypes):
+        waterTank = cosmolSimTank(sourceLocations, tankWidth, tankHeight, simFile)
+
+        print(boatType)
+        algPositions[i] = {'x':[], 'y':[]}
+        # Add the Boats to the Tank
+        boatCollection = []
+        for boatNum in range(numBoats):
+            boatCollection.append(boatType(waterTank, boatSpeed, boatLocations[boatNum]))
+        
+        algPositions[i]['x'].append(boatCollection[0].position.x)
+        algPositions[i]['y'].append(boatCollection[0].position.y)
+        
+        total_time_steps = 0.0
+        # Run the Search Algorythm Until the Boat Reaches the Source
+        while not waterTank.sourceFound():
+            # Move Each Boat
+            for boat in boatCollection:
+                boat.updatePosition()
+                
+            algPositions[i]['x'].append(boat.position.x)
+            algPositions[i]['y'].append(boat.position.y)
+            total_time_steps += 1
+            if total_time_steps > 50:
+                timeSteps.append(total_time_steps)
+                break
+            if waterTank.sourceFound():
+                timeSteps.append(total_time_steps)
+            
+    fig = plt.figure()
+    ax = fig.add_subplot(111, xlim=[0, tankWidth], ylim=[0, tankHeight], autoscale_on=False)
+    ax.set_aspect('auto')
+    
+    xVec = np.linspace(0, tankWidth, 75)
+    yVec = np.linspace(0, tankHeight, 75)
+    xData, yData, zData = waterTank.find2DSimMap(xVec, yVec)
+    fullData = np.stack((xData, yData, zData))
+    sc = plt.scatter(fullData[0], fullData[1], c=fullData[2], cmap='jet', norm=matplotlib.colors.LogNorm())
+    plt.clim(10E-20,10)  # identical to caxis([-4,4]) in MATLAB
+    plt.colorbar(sc)
+
+    for i in range(len(boatTypes)):
+        plt.plot(algPositions[i]['x'], algPositions[i]['y'], label=labels[i]+" Steps: "+str(timeSteps[i]), linewidth=2, path_effects=[pe.Stroke(linewidth=4, foreground='k'), pe.Normal()])
+    
+    plt.title("Search Algorithm Comparison")
+    plt.xlabel("Tank Width")
+    plt.ylabel("Tank Height")
+    plt.legend(loc='upper left', bbox_to_anchor=(1.25, 1.02), fancybox=True, shadow=True)
+    
+    plt.show()
+    
+    return algPositions, fullData
 
 
 
