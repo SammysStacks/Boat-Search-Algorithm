@@ -43,7 +43,7 @@ if __name__ == "__main__":
     tankHeight = 30 # The height of the tank (Inches). Must be an Integer
     
     # Specify the Source Locations
-    sourceLocations = [(16, 17)]
+    sourceLocations = [(20, 20), (15,27)]
     # Specify the Simulation Data
     simFile = './Helper Files/simulatedSource/Input Data/diffusion4.xlsx'
     
