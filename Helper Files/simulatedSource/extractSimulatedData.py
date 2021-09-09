@@ -97,7 +97,7 @@ class dataProcessing:
 
 class processData(dataProcessing):
     
-    def extractCosmolData(self, xlWorksheet, yVal = 25, zCol = 3):
+    def extractCosmolData(self, xlWorksheet, yVal = 23, zCol = 3):
         
         # -------------------------------------------------------------------#
         # ----------------------- Extract Run Info --------------------------#
@@ -105,16 +105,16 @@ class processData(dataProcessing):
         x = []; z = []; concentrations = []
         # Loop Through the Info Section and Extract the Needed Run Info from Excel
         rowGenerator = xlWorksheet.rows
-        for cell in rowGenerator:
+        for i,cell in enumerate(rowGenerator):
 
-            if cell[1].value == yVal:
-                x.append(cell[0].value)
-                z.append(cell[2].value)
-                concentrations.append(cell[zCol].value)
+            if type(cell[1].value) == type(yVal):
+                x.append(float(cell[0].value))
+                z.append(float(cell[1].value))
+                concentrations.append(float(cell[zCol].value))
         
         return x, z, concentrations
     
-    def getData(self, oldFile, testSheetNum = 0, excelDelimiter = ",", yVal = 25):
+    def getData(self, oldFile, testSheetNum = 0, excelDelimiter = ",", yVal = 0.23, zCol = 2):
         """
         --------------------------------------------------------------------------
         Input Variable Definitions:
@@ -151,7 +151,7 @@ class processData(dataProcessing):
         print("Extracting Data from the Excel File:", excelFile)
         
         # Extract Time and Current Data from the File
-        xPoints, zPoints, concentrations = self.extractCosmolData(xlWorksheet, yVal)
+        xPoints, zPoints, concentrations = self.extractCosmolData(xlWorksheet, yVal, zCol)
         
         xlWorkbook.close()
         # Finished Data Collection: Close Workbook and Return Data to User
@@ -161,8 +161,8 @@ class processData(dataProcessing):
 
 if __name__ == "__main__":
     
-    cosmolFile = './Input Data/diffusion4.txt'
-    x, y, z = processData().getData(cosmolFile)
+    cosmolFile = './Input Data/zero_speed.csv'
+    x, y, z = processData().getData(cosmolFile, yVal = 0.23, zCol = 2)
     # Rescale Data
     if True:
         x -= min(x)

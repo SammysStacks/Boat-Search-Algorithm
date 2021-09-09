@@ -35,24 +35,26 @@ if __name__ == "__main__":
 
     # Specify the Boat Parameters
     numBoats = 1   # The Number of Boats Checking for the Source.
-    boatSpeed = 1  # numtiles/movement. Can Move at an Arbitrary Angle
-    boatLocations = [(4,3)]
+    boatSpeed = 2 # numtiles/movement. Can Move at an Arbitrary Angle. Units: cm
+    boatLocations = [(20,4)]  # (2,5) with 2.4 @30x30;  (33,22) with 2.02 @35x35
+    boatDirection = [1,1] # The Initial Direction of the Boat 
+    sensorDistance = 1.6 # Distance from the Boat's Sensor to the Boat's Center
 
     # Specify the Tank's Parameters
-    tankWidth = 30  # The width of the tank (Inches). Must be an Integer
-    tankHeight = 30 # The height of the tank (Inches). Must be an Integer
+    tankWidth = 40 # The width of the tank (Inches). Must be an Integer
+    tankHeight = 40 # The height of the tank (Inches). Must be an Integer
     
     # Specify the Source Locations
     sourceLocations = [(20, 20), (15,27)]
     # Specify the Simulation Data
-    simFile = './Helper Files/simulatedSource/Input Data/diffusion4.xlsx'
+    simFile = './Helper Files/simulatedSource/Input Data/Excel Files/zero_speed.xlsx'
     
     # ---------------------------------------------------------------------- #
     #                        Running Boat Simulation                         #
     # ---------------------------------------------------------------------- #
 
-    #searchObj = objectParameters.runSimulation(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats, simFile)
+    #searchObj = objectParameters.runSimulation(sourceLocations, boatLocations, boatSpeed, boatDirection, tankWidth, tankHeight, numBoats, simFile)
 
-    algPositions, fullData = objectParameters.compareAlgorythms(sourceLocations, boatLocations, boatSpeed, tankWidth, tankHeight, numBoats, simFile)
+    algPositions, fullData = objectParameters.compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, sensorDistance, tankWidth, tankHeight, numBoats, simFile)
     
     
