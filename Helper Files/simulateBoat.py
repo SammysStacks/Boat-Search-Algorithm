@@ -44,7 +44,6 @@ class boatVisualization:
         self.boats = None
         self.text = self.w.create_text(25, 0, anchor=tk.NW,
                                        text=self._status_string(0, 0))
-        #self.boatImage = ImageTk.PhotoImage(file="./Helper Files/Boat Images/boat copy.jpg")
         
         self.time = 0
         self.master.update()

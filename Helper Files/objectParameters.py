@@ -220,6 +220,11 @@ class cosmolSimTank(rectangularTank):
         # Find the Single Source Input
         maxIndex = np.argmax(self.simZ)
         self.sourceLocations = [(np.round(self.simX[maxIndex]), np.round(self.simY[maxIndex]))]
+        
+        maxIndex2 = np.argmax(self.simZ[20 < self.simX])
+        self.sourceLocations.append((np.round(self.simX[[20 < self.simX]][maxIndex2]), np.round(self.simY[20 < self.simX][maxIndex2])))
+        print(self.sourceLocations)
+        
         # Interpolate the Space
         self.interp = LinearNDInterpolator(list(zip(self.simX, self.simY)), self.simZ)
                 
@@ -481,6 +486,9 @@ class Boat(object):
         # Find Angle Between Reference
         dot_product = np.round(np.dot(unitVectorDirection, referenceDirection), 10)
         newAngle = np.degrees(np.arccos(dot_product))
+        # Account for Direction
+        if newDirection[1] < 0:
+            newAngle = 360 - newAngle
         # Return the New Angle
         return newAngle
     
@@ -1067,7 +1075,7 @@ def runSimulation(sourceLocations, boatLocations, boatSpeed, boatDirection, sens
     #Return the Total Time Steps it Took
     return total_time_steps
 
-def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, sensorDistance, tankWidth, tankHeight, numBoats = 1, simFile = "./"):
+def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, sensorDistance, tankWidth, tankHeight, numBoats = 1, simFile = "./", outFile = "./diffusion_stable_UpperRight.png"):
     """
     Runs NUM_TRIALS trials of the simulation and returns the mean number of
     time-steps needed to clean the fraction MIN_COVERAGE of the tank.
@@ -1122,10 +1130,8 @@ def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, 
             algPositions[i]['y'].append(boat.position.y)
             total_time_steps += 1
             if total_time_steps > 39:
-                timeSteps.append(total_time_steps)
                 break
-            if waterTank.sourceFound():
-                timeSteps.append(total_time_steps)
+        timeSteps.append(total_time_steps)
             
     fig = plt.figure()
     ax = fig.add_subplot(111, xlim=[0, tankWidth], ylim=[0, tankHeight], autoscale_on=False)
@@ -1138,9 +1144,11 @@ def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, 
     sc = plt.scatter(fullData[0], fullData[1], c=fullData[2], cmap='jet', s=1)#, norm=matplotlib.colors.LogNorm())
     #plt.clim(10E-20,10)  # identical to caxis([-4,4]) in MATLAB
     plt.colorbar(sc)
-
+    
     for i in range(len(boatTypes)):
         plt.plot(algPositions[i]['x'], algPositions[i]['y'], color=colorTypes[i], label=labels[i]+" Steps: "+str(timeSteps[i]), linewidth=2, zorder=zOrder[i])#, path_effects=[pe.Stroke(linewidth=4, foreground='k'), pe.Normal()])
+        #break
+    #plt.plot([waterTank.sourceLocations[0][0], waterTank.sourceLocations[1][0]], [waterTank.sourceLocations[0][1], waterTank.sourceLocations[1][1]], 'o', markersize = 10)
     
     plt.axis('off')
     #plt.title("Search Algorithm Comparison")
@@ -1153,7 +1161,6 @@ def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, 
                 labelleft=False,
                 labelbottom=False)
     
-    outFile = "./diffusion_stable_UpperRight.png"
     plt.savefig(outFile, dpi=300, transparent=True, bbox_extra_artists=(lgd,), bbox_inches='tight')
     
     plt.show()

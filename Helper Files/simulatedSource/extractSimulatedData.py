@@ -107,6 +107,24 @@ class processData(dataProcessing):
         rowGenerator = xlWorksheet.rows
         for i,cell in enumerate(rowGenerator):
 
+            if type(cell[0].value) == type(yVal):
+                x.append(float(cell[0].value))
+                z.append(float(cell[1].value))
+                concentrations.append(float(cell[zCol].value))
+        
+        return x, z, concentrations
+    
+    
+    def extractCosmolData2(self, xlWorksheet, yVal = 23, zCol = 3):
+        
+        # -------------------------------------------------------------------#
+        # ----------------------- Extract Run Info --------------------------#
+        
+        x = []; z = []; concentrations = []
+        # Loop Through the Info Section and Extract the Needed Run Info from Excel
+        rowGenerator = xlWorksheet.rows
+        for i,cell in enumerate(rowGenerator):
+
             if type(cell[1].value) == type(yVal):
                 x.append(float(cell[0].value))
                 z.append(float(cell[1].value))
@@ -114,7 +132,8 @@ class processData(dataProcessing):
         
         return x, z, concentrations
     
-    def getData(self, oldFile, testSheetNum = 0, excelDelimiter = ",", yVal = 0.23, zCol = 2):
+    
+    def getData(self, oldFile, testSheetNum = 0, excelDelimiter = "fixedWidth", yVal = 0.025, zCol = 3):
         """
         --------------------------------------------------------------------------
         Input Variable Definitions:
@@ -161,8 +180,8 @@ class processData(dataProcessing):
 
 if __name__ == "__main__":
     
-    cosmolFile = './Input Data/zero_speed.csv'
-    x, y, z = processData().getData(cosmolFile, yVal = 0.23, zCol = 2)
+    cosmolFile = './Input Data/diffusion_two_drop_4M_0speed_2.txt'
+    x, y, z = processData().getData(cosmolFile, yVal = 0.025, zCol = 3)
     # Rescale Data
     if True:
         x -= min(x)
@@ -171,6 +190,7 @@ if __name__ == "__main__":
         x = x*20/max(x)
         y = y*20/max(y)
     
+    x, y, z = np.array(x), np.array(y), np.array(z)
     # Get Sampled Data
     xSamples = np.arange(min(x), max(x), 0.2)
     ySamples = np.arange(min(y), max(y), 0.2)
