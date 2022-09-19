@@ -63,6 +63,7 @@ if __name__ == "__main__":
         boatLocations = [point]
         
         outFile = "./ALL/AStar_" + str(x) + "-" + str(y) + ".png"
+        # algPositions, fullData = objectParameters.runSimulation(sourceLocations, boatLocations, boatSpeed, boatDirection, sensorDistance, tankWidth, tankHeight, numBoats, simFile, True)
         algPositions, fullData = objectParameters.compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, sensorDistance, tankWidth, tankHeight, numBoats, simFile, outFile)
     
     

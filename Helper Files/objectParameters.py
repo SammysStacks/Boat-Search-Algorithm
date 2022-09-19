@@ -3,9 +3,9 @@ This simulation has been adapted from https://ocw.mit.edu/courses/electrical-eng
 """
 
 # Import Basic Modules
+import os
 import sys
 import math
-import pylab
 import random
 import numpy as np
 # Import Code to Simulate/Visualize the Boat's Movement
@@ -14,7 +14,6 @@ import simulateBoat
 from scipy import interpolate
 from scipy.interpolate import LinearNDInterpolator
 # Plotting
-import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
 import matplotlib.patheffects as pe
@@ -222,7 +221,7 @@ class cosmolSimTank(rectangularTank):
         self.sourceLocations = [(np.round(self.simX[maxIndex]), np.round(self.simY[maxIndex]))]
         
         maxIndex2 = np.argmax(self.simZ[20 < self.simX])
-        self.sourceLocations.append((np.round(self.simX[[20 < self.simX]][maxIndex2]), np.round(self.simY[20 < self.simX][maxIndex2])))
+        self.sourceLocations.append((np.round(self.simX[20 < self.simX][maxIndex2]), np.round(self.simY[20 < self.simX][maxIndex2])))
         print(self.sourceLocations)
         
         # Interpolate the Space
@@ -1161,6 +1160,7 @@ def compareAlgorythms(sourceLocations, boatLocations, boatSpeed, boatDirection, 
                 labelleft=False,
                 labelbottom=False)
     
+    os.makedirs(os.path.dirname(outFile) + "/", exist_ok=True)
     plt.savefig(outFile, dpi=300, transparent=True, bbox_extra_artists=(lgd,), bbox_inches='tight')
     
     plt.show()
